@@ -1,0 +1,6 @@
+User asked: {{asr_text}}
+
+Vehicle context JSON:
+{{context_json}}
+
+Respond according to guidance_policy.

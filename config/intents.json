@@ -1,0 +1,10 @@
+{
+  "coolant_temp": {
+    "keywords": ["coolant", "temperature", "temp"],
+    "window_sec": 30
+  },
+  "driving_style": {
+    "keywords": ["driving", "aggressive", "smooth"],
+    "window_sec": 300
+  }
+}
