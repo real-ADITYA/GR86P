@@ -1,0 +1,10 @@
+{
+  "timestamp": "ISO-8601 string with timezone offset",
+  "speed_mph": "number",
+  "rpm": "number",
+  "throttle_percent": "number (0-100)",
+  "coolant_temp_f": "number",
+  "intake_temp_f": "number",
+  "stft_percent": "number",
+  "ltft_percent": "number"
+}
