@@ -1,6 +1,9 @@
-User asked: {{asr_text}}
+The driver asked:
 
-Vehicle context JSON:
+{{asr_text}}
+
+Here is the current vehicle telemetry and driving metrics:
+
 {{context_json}}
 
-Respond according to guidance_policy.
+Answer the driver naturally, like a calm copilot sitting in the passenger seat.

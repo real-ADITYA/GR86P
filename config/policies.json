@@ -4,7 +4,7 @@
   "do_not": [
     "invent sensor values",
     "claim legal speed limits",
-    "give unsafe advice"
+    "guess data not provided"
   ],
   "response_format": {
     "speakable_text_max_chars": 260
