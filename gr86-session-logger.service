@@ -1,0 +1,16 @@
+[Unit]
+Description=GR86 Session Logger
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=aditya
+WorkingDirectory=/home/aditya/GR86P
+ExecStart=/home/aditya/GR86P/run_logger.sh
+Restart=on-failure
+RestartSec=3
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

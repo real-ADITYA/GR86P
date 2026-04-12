@@ -1,0 +1,50 @@
+{
+  "session_id": "20260408_210631",
+  "start_time": 1775696791.0181854,
+  "last_checkpoint_time": 1775697217.1603503,
+  "elapsed_time_sec": 426.14,
+  "total_frame_count": 16516,
+  "frame_id_counts": {
+    "390": 2084,
+    "32B": 2084,
+    "393": 2084,
+    "39A": 1042,
+    "68C": 174,
+    "332": 1740,
+    "68D": 174,
+    "515": 417,
+    "6CF": 174,
+    "3AC": 2099,
+    "330": 1736,
+    "500": 417,
+    "660": 416,
+    "513": 416,
+    "6BB": 174,
+    "3FB": 416,
+    "640": 174,
+    "652": 175,
+    "651": 174,
+    "6B1": 173,
+    "654": 173
+  },
+  "latest_decoded_values": {
+    "rpm": null,
+    "speed_mph": null,
+    "throttle_pct": null,
+    "brake_pct": null,
+    "steering_angle_deg": null,
+    "gear": null,
+    "neutral": null,
+    "reverse": null,
+    "fuel_level_pct": 0.1,
+    "coolant_temp_c": null,
+    "oil_temp_c": null
+  },
+  "running_summary_metrics": {
+    "max_rpm": 0,
+    "max_speed_mph": 0.0,
+    "max_throttle_pct": 0.0,
+    "max_brake_pct": 0.0
+  },
+  "event_counters": {}
+}
