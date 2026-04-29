@@ -2,26 +2,30 @@ import glob
 import time
 import serial
 
-# finds the port on the pi
+
 def find_gnss_port():
     candidates = glob.glob("/dev/ttyACM*") + glob.glob("/dev/ttyUSB*")
     if not candidates:
         return None
     return candidates[0]
 
-# useful helper to convert NMEA lat/lon to decimal degrees
+
 def nmea_to_decimal(raw, direction):
     if not raw or not direction:
         return None
+
     value = float(raw)
+
     degrees = int(value / 100)
     minutes = value - (degrees * 100)
     decimal = degrees + (minutes / 60.0)
+
     if direction in ("S", "W"):
         decimal *= -1
+
     return decimal
 
-# simple NMEA parser that extracts basic info from RMC and GGA sentences
+
 def parse_rmc(parts):
     # Example: $GNRMC,time,status,lat,N,lon,W,speed_knots,course,date,...
     if len(parts) < 10:
@@ -47,7 +51,7 @@ def parse_rmc(parts):
         "fix_valid": True,
     }
 
-# GGA has more detailed info about the fix, number of satellites, HDOP, altitude, etc
+
 def parse_gga(parts):
     # Example: $GNGGA,time,lat,N,lon,W,fix_quality,num_sats,hdop,altitude,M,...
     if len(parts) < 10:
@@ -73,7 +77,7 @@ def parse_gga(parts):
         "altitude_m": altitude_m,
     }
 
-# main GNSS reader class that opens the serial port and reads lines, parsing them into structured records
+
 def parse_nmea(line):
     if not line.startswith("$"):
         return None
@@ -91,7 +95,7 @@ def parse_nmea(line):
 
     return None
 
-# simple GNSS reader that reads lines from the serial port and parses them into structured records
+
 class GnssReader:
     def __init__(self, port=None, baudrate=9600):
         if port is None:
