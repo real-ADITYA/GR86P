@@ -44,6 +44,8 @@ Each time the car powers on, the Pi creates a new session folder and logs:
 - periodic checkpoint data
 - GNSS data when available
 
+![GR86P Sessions](README_files/SESSIONS.png)
+
 Current Part 1 components include:
 
 - CAN reader for live SocketCAN frames
@@ -61,6 +63,8 @@ This gives me durable telemetry capture even though the Pi does not shut down cl
 
 I also added replay tools that take logged session data and turn it into something more usable.
 
+![GR86P decoded](README_files/DECODE.png)
+
 So far, I have worked on:
 
 - CAN decoding for selected signals
@@ -69,6 +73,8 @@ So far, I have worked on:
 - HTML-based replay output
 
 This moves the project beyond raw logging and toward actual drive playback and review.
+
+![GR86P replay](README_files/CANREPLAY.gif)
 
 ---
 
