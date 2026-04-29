@@ -11,9 +11,9 @@ The GR86 Session Logger is a comprehensive application designed to log and analy
 - **User-friendly Interface**: A simple and intuitive interface to facilitate easy navigation and operation.
 
 ## Technologies Used
-- **Programming Language**: [Specify programming languages used, e.g., Python, JavaScript]
-- **Frameworks**: [Specify any frameworks used, e.g., Flask, React]
-- **Database**: [Specify the database used, if any]
+- **Programming Language**: Python, C
+- **Frameworks**: TBD
+- **Database**: TBD
 
 ## Installation & Setup
 1. Clone the repository:
@@ -32,10 +32,7 @@ The GR86 Session Logger is a comprehensive application designed to log and analy
    ```
    [Include command to start the application, e.g., npm start, python app.py]
    ```
-
-## Contributing
-Contributions are welcome! Please read the [CONTRIBUTING.md](CONTRIBUTING.md) file for more details.
-
+   
 ## License
 This project is licensed under the [MIT License](LICENSE).  
 
