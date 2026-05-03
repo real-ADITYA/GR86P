@@ -20,6 +20,12 @@
 #define PATH_MAX 4096
 #endif
 
+#define SPEED_SCALE 0.015694
+#define MS_TO_MPH 2.23694
+#define MAX_SANE_DT_SEC 1.0
+#define MIN_USEFUL_DISTANCE_MILES (100.0 / 5280.0)
+#define MIN_MOVING_SPEED_MPH 1.0
+
 typedef struct {
     char path[PATH_MAX];
     char name[512];
@@ -40,6 +46,8 @@ typedef struct {
 
     double max_rpm;
     double max_speed_mph;
+    double max_wheel_speed_mph;
+
     double avg_speed_sum;
     unsigned long long speed_samples;
     unsigned long long moving_samples;
@@ -79,6 +87,20 @@ typedef struct {
     double end_lat, end_lon;
     int has_prev_gnss_point;
     double prev_lat, prev_lon;
+
+    // New: CAN-derived distance and sane integrated time
+    double estimated_distance_miles_can;
+    double integrated_can_duration_sec;
+    double moving_time_sec;
+
+    double last_can_time;
+    int has_last_can_time;
+
+    double last_wheel_speed_time;
+    int has_last_wheel_speed_time;
+
+    // New: GNSS movement from start
+    double max_distance_from_start_miles_gnss;
 } Summary;
 
 static int starts_with(const char *s, const char *prefix) {
@@ -117,7 +139,7 @@ static int16_t bytes_to_int16_le(const uint8_t *raw, int start_byte) {
 }
 
 static double haversine_miles(double lat1, double lon1, double lat2, double lon2) {
-    const double R = 3958.7613; // Earth radius in miles
+    const double R = 3958.7613;
     const double deg_to_rad = M_PI / 180.0;
 
     double p1 = lat1 * deg_to_rad;
@@ -150,6 +172,18 @@ static void init_summary(Summary *s) {
     s->max_lon = -9999.0;
 
     s->last_brake_light = 0;
+
+    s->estimated_distance_miles_can = 0.0;
+    s->integrated_can_duration_sec = 0.0;
+    s->moving_time_sec = 0.0;
+
+    s->last_can_time = 0.0;
+    s->has_last_can_time = 0;
+
+    s->last_wheel_speed_time = 0.0;
+    s->has_last_wheel_speed_time = 0;
+
+    s->max_distance_from_start_miles_gnss = 0.0;
 }
 
 static void parse_can_line(const char *line, Summary *s) {
@@ -186,14 +220,21 @@ static void parse_can_line(const char *line, Summary *s) {
     s->can_end_time = ts;
     s->can_frame_count++;
 
+    // Integrate sane CAN duration regardless of ID
+    if (s->has_last_can_time) {
+        double dt_sec = ts - s->last_can_time;
+        if (dt_sec > 0.0 && dt_sec < MAX_SANE_DT_SEC) {
+            s->integrated_can_duration_sec += dt_sec;
+        }
+    }
+    s->last_can_time = ts;
+    s->has_last_can_time = 1;
+
     switch (arb_id) {
         case 0x040: {
-            // Engine RPM: bitsToUIntLe(raw, 16, 14)
             double rpm = (double)bits_to_uint_le(raw, 16, 14);
             if (rpm > s->max_rpm) s->max_rpm = rpm;
 
-            // Accelerator position: byte E / 2.55
-            // In RaceChrono naming A-H, E is raw[4].
             double accel = raw[4] / 2.55;
             if (accel > s->max_accel_pct) s->max_accel_pct = accel;
             s->accel_sum += accel;
@@ -202,7 +243,6 @@ static void parse_can_line(const char *line, Summary *s) {
         }
 
         case 0x138: {
-            // Steering angle: bytesToIntLe(raw, 2, 2) * -0.1
             double steering = bytes_to_int16_le(raw, 2) * -0.1;
             double abs_steering = fabs(steering);
 
@@ -216,30 +256,23 @@ static void parse_can_line(const char *line, Summary *s) {
         }
 
         case 0x139: {
-            // Speed: bitsToUIntLe(raw, 16, 13) * 0.015694
-            double speed = bits_to_uint_le(raw, 16, 13) * 0.015694;
+            double speed = bits_to_uint_le(raw, 16, 13) * SPEED_SCALE * MS_TO_MPH;
 
             if (speed > s->max_speed_mph) s->max_speed_mph = speed;
 
             s->avg_speed_sum += speed;
             s->speed_samples++;
 
-            if (speed > 1.0) {
+            if (speed > MIN_MOVING_SPEED_MPH) {
                 s->moving_samples++;
             }
 
-            // Brake lights switch: E & 0x4
-            // E is raw[4].
             int brake_light = (raw[4] & 0x04) ? 1 : 0;
-
             if (brake_light && !s->last_brake_light) {
                 s->brake_light_events++;
             }
-
             s->last_brake_light = brake_light;
 
-            // Brake position approximation: min(F / 0.7, 100)
-            // F is raw[5].
             double brake_pos = raw[5] / 0.7;
             if (brake_pos > 100.0) brake_pos = 100.0;
             if (brake_pos > s->max_brake_position_pct) {
@@ -249,16 +282,42 @@ static void parse_can_line(const char *line, Summary *s) {
             break;
         }
 
+        case 0x13A: {
+            double fl = bits_to_uint_le(raw, 12, 13) * SPEED_SCALE * MS_TO_MPH;
+            double fr = bits_to_uint_le(raw, 25, 13) * SPEED_SCALE * MS_TO_MPH;
+            double rl = bits_to_uint_le(raw, 38, 13) * SPEED_SCALE * MS_TO_MPH;
+            double rr = bits_to_uint_le(raw, 51, 13) * SPEED_SCALE * MS_TO_MPH;
+
+            if (fl > s->max_wheel_speed_mph) s->max_wheel_speed_mph = fl;
+            if (fr > s->max_wheel_speed_mph) s->max_wheel_speed_mph = fr;
+            if (rl > s->max_wheel_speed_mph) s->max_wheel_speed_mph = rl;
+            if (rr > s->max_wheel_speed_mph) s->max_wheel_speed_mph = rr;
+
+            double avg_wheel_speed_mph = (fl + fr + rl + rr) / 4.0;
+
+            if (s->has_last_wheel_speed_time) {
+                double dt_sec = ts - s->last_wheel_speed_time;
+
+                if (dt_sec > 0.0 && dt_sec < MAX_SANE_DT_SEC) {
+                    s->estimated_distance_miles_can += avg_wheel_speed_mph * (dt_sec / 3600.0);
+
+                    if (avg_wheel_speed_mph > MIN_MOVING_SPEED_MPH) {
+                        s->moving_time_sec += dt_sec;
+                    }
+                }
+            }
+
+            s->last_wheel_speed_time = ts;
+            s->has_last_wheel_speed_time = 1;
+            break;
+        }
+
         case 0x241: {
-            // Gear: bitsToUIntLe(raw, 35, 3)
-            // 0=N, 1-6 gears
             unsigned int gear = bits_to_uint_le(raw, 35, 3);
             if (gear <= 6) {
                 s->gear_samples[gear]++;
             }
 
-            // Clutch position: (F & 0x80) / 1.28
-            // F is raw[5]. If high bit set, clutch is depressed.
             if (raw[5] & 0x80) {
                 s->clutch_depressed_samples++;
             }
@@ -267,9 +326,6 @@ static void parse_can_line(const char *line, Summary *s) {
         }
 
         case 0x345: {
-            // Engine oil temperature: D - 40
-            // Coolant temperature: E - 40
-            // D=raw[3], E=raw[4]
             double oil_c = raw[3] - 40.0;
             double coolant_c = raw[4] - 40.0;
 
@@ -279,7 +335,6 @@ static void parse_can_line(const char *line, Summary *s) {
         }
 
         case 0x390: {
-            // Air temperature: E / 2 - 40
             double air_c = raw[4] / 2.0 - 40.0;
 
             if (air_c > s->max_air_temp_c) s->max_air_temp_c = air_c;
@@ -288,7 +343,6 @@ static void parse_can_line(const char *line, Summary *s) {
         }
 
         case 0x393: {
-            // Fuel level: 100 - (bitsToUIntLe(raw, 32, 10) / 10.23)
             double fuel = 100.0 - (bits_to_uint_le(raw, 32, 10) / 10.23);
 
             if (!s->has_fuel) {
@@ -310,7 +364,6 @@ static void parse_raw_can_file(const char *path, Summary *s) {
     if (!fp) return;
 
     char line[512];
-
     while (fgets(line, sizeof(line), fp)) {
         parse_can_line(line, s);
     }
@@ -326,24 +379,16 @@ static int extract_json_double(const char *line, const char *key, double *out) {
     if (!p) return 0;
 
     p += strlen(pattern);
-
     while (*p == ' ' || *p == '\t') p++;
 
     if (strncmp(p, "null", 4) == 0) return 0;
 
     char *end = NULL;
     double val = strtod(p, &end);
-
     if (end == p) return 0;
 
     *out = val;
     return 1;
-}
-
-static int extract_json_bool_true(const char *line, const char *key) {
-    char pattern[64];
-    snprintf(pattern, sizeof(pattern), "\"%s\": true", key);
-    return strstr(line, pattern) != NULL;
 }
 
 static void parse_gnss_line(const char *line, Summary *s) {
@@ -361,7 +406,6 @@ static void parse_gnss_line(const char *line, Summary *s) {
 
     s->gnss_end_time = wall_time;
 
-    // Only count records with parsed lat/lon.
     double lat, lon;
     int has_lat = extract_json_double(line, "lat", &lat);
     int has_lon = extract_json_double(line, "lon", &lon);
@@ -370,8 +414,6 @@ static void parse_gnss_line(const char *line, Summary *s) {
         return;
     }
 
-    // Your logger writes both RMC and GGA records.
-    // Some may be repeated at similar timestamps, but this is fine for a first summary.
     s->gnss_fix_count++;
 
     if (s->gnss_fix_count == 1) {
@@ -387,11 +429,13 @@ static void parse_gnss_line(const char *line, Summary *s) {
     if (lon < s->min_lon) s->min_lon = lon;
     if (lon > s->max_lon) s->max_lon = lon;
 
+    double from_start = haversine_miles(s->start_lat, s->start_lon, lat, lon);
+    if (from_start > s->max_distance_from_start_miles_gnss) {
+        s->max_distance_from_start_miles_gnss = from_start;
+    }
+
     if (s->has_prev_gnss_point) {
         double step = haversine_miles(s->prev_lat, s->prev_lon, lat, lon);
-
-        // Basic sanity filter to ignore GPS jumps.
-        // If a single GNSS step is over 0.25 miles, skip it.
         if (step >= 0.0 && step < 0.25) {
             s->gnss_distance_miles += step;
         }
@@ -417,7 +461,6 @@ static void parse_gnss_file(const char *path, Summary *s) {
     if (!fp) return;
 
     char line[2048];
-
     while (fgets(line, sizeof(line), fp)) {
         parse_gnss_line(line, s);
     }
@@ -430,6 +473,21 @@ static double safe_avg(double sum, unsigned long long count) {
     return sum / (double)count;
 }
 
+static int session_is_useful(const Summary *s) {
+    int has_can_motion =
+        (s->estimated_distance_miles_can >= MIN_USEFUL_DISTANCE_MILES) ||
+        (s->max_speed_mph > MIN_MOVING_SPEED_MPH) ||
+        (s->max_wheel_speed_mph > MIN_MOVING_SPEED_MPH) ||
+        (s->moving_time_sec > 1.0);
+
+    if (s->has_gnss && s->gnss_fix_count > 0) {
+        int has_gnss_motion = (s->max_distance_from_start_miles_gnss >= MIN_USEFUL_DISTANCE_MILES);
+        return has_can_motion || has_gnss_motion;
+    }
+
+    return has_can_motion;
+}
+
 static void write_summary_json(const char *session_dir, const char *session_name, const Summary *s) {
     char out_path[PATH_MAX];
     snprintf(out_path, sizeof(out_path), "%s/summary.json", session_dir);
@@ -440,14 +498,11 @@ static void write_summary_json(const char *session_dir, const char *session_name
         return;
     }
 
-    double duration_sec = 0.0;
-    if (s->has_can && s->can_end_time >= s->can_start_time) {
-        duration_sec = s->can_end_time - s->can_start_time;
-    }
+    double duration_sec = s->integrated_can_duration_sec;
 
     double moving_ratio = 0.0;
-    if (s->speed_samples > 0) {
-        moving_ratio = (double)s->moving_samples / (double)s->speed_samples;
+    if (duration_sec > 0.0) {
+        moving_ratio = s->moving_time_sec / duration_sec;
     }
 
     double avg_speed = safe_avg(s->avg_speed_sum, s->speed_samples);
@@ -469,13 +524,16 @@ static void write_summary_json(const char *session_dir, const char *session_name
     fprintf(fp, "  \"time\": {\n");
     fprintf(fp, "    \"start_wall_time\": %.6f,\n", s->has_can ? s->can_start_time : 0.0);
     fprintf(fp, "    \"end_wall_time\": %.6f,\n", s->has_can ? s->can_end_time : 0.0);
-    fprintf(fp, "    \"duration_sec\": %.3f\n", duration_sec);
+    fprintf(fp, "    \"duration_sec\": %.3f,\n", duration_sec);
+    fprintf(fp, "    \"moving_time_sec\": %.3f\n", s->moving_time_sec);
     fprintf(fp, "  },\n");
 
     fprintf(fp, "  \"can\": {\n");
     fprintf(fp, "    \"frame_count\": %llu,\n", s->can_frame_count);
     fprintf(fp, "    \"max_rpm\": %.1f,\n", s->max_rpm);
     fprintf(fp, "    \"max_speed_mph\": %.3f,\n", s->max_speed_mph);
+    fprintf(fp, "    \"max_wheel_speed_mph\": %.3f,\n", s->max_wheel_speed_mph);
+    fprintf(fp, "    \"estimated_distance_miles_can\": %.6f,\n", s->estimated_distance_miles_can);
     fprintf(fp, "    \"avg_speed_mph\": %.3f,\n", avg_speed);
     fprintf(fp, "    \"moving_ratio\": %.4f,\n", moving_ratio);
     fprintf(fp, "    \"max_accelerator_pct\": %.3f,\n", s->max_accel_pct);
@@ -527,10 +585,9 @@ static void write_summary_json(const char *session_dir, const char *session_name
         fprintf(fp, "    \"distance_miles\": %.6f,\n", s->gnss_distance_miles);
         fprintf(fp, "    \"max_speed_mph\": %.3f,\n", s->max_gnss_speed_mph);
         fprintf(fp, "    \"avg_speed_mph\": %.3f,\n", avg_gnss_speed);
-
+        fprintf(fp, "    \"max_distance_from_start_miles\": %.6f,\n", s->max_distance_from_start_miles_gnss);
         fprintf(fp, "    \"start\": {\"lat\": %.8f, \"lon\": %.8f},\n", s->start_lat, s->start_lon);
         fprintf(fp, "    \"end\": {\"lat\": %.8f, \"lon\": %.8f},\n", s->end_lat, s->end_lon);
-
         fprintf(fp, "    \"bounds\": {\n");
         fprintf(fp, "      \"min_lat\": %.8f,\n", s->min_lat);
         fprintf(fp, "      \"max_lat\": %.8f,\n", s->max_lat);
@@ -541,6 +598,7 @@ static void write_summary_json(const char *session_dir, const char *session_name
         fprintf(fp, "    \"distance_miles\": null,\n");
         fprintf(fp, "    \"max_speed_mph\": null,\n");
         fprintf(fp, "    \"avg_speed_mph\": null,\n");
+        fprintf(fp, "    \"max_distance_from_start_miles\": null,\n");
         fprintf(fp, "    \"start\": null,\n");
         fprintf(fp, "    \"end\": null,\n");
         fprintf(fp, "    \"bounds\": null\n");
@@ -555,9 +613,11 @@ static void write_summary_json(const char *session_dir, const char *session_name
 static void process_session(const SessionPath *sp) {
     char raw_path[PATH_MAX];
     char gnss_path[PATH_MAX];
+    char summary_path[PATH_MAX];
 
     snprintf(raw_path, sizeof(raw_path), "%s/raw_can.log", sp->path);
     snprintf(gnss_path, sizeof(gnss_path), "%s/gnss.log", sp->path);
+    snprintf(summary_path, sizeof(summary_path), "%s/summary.json", sp->path);
 
     if (!file_exists(raw_path)) {
         fprintf(stderr, "Skipping %s: no raw_can.log\n", sp->name);
@@ -573,13 +633,21 @@ static void process_session(const SessionPath *sp) {
         parse_gnss_file(gnss_path, &s);
     }
 
+    if (!session_is_useful(&s)) {
+        remove(summary_path);
+        printf("Skipped   %-32s idle/useless session\n", sp->name);
+        return;
+    }
+
     write_summary_json(sp->path, sp->name, &s);
 
-    printf("Processed %-32s CAN=%llu GNSS=%s fixes=%llu\n",
+    printf("Processed %-32s CAN=%llu GNSS=%s fixes=%llu duration=%.1fs can_miles=%.3f\n",
            sp->name,
            s.can_frame_count,
            s.has_gnss ? "yes" : "no",
-           s.gnss_fix_count);
+           s.gnss_fix_count,
+           s.integrated_can_duration_sec,
+           s.estimated_distance_miles_can);
 }
 
 static int collect_sessions(const char *base_dir, SessionPath **out_sessions) {
