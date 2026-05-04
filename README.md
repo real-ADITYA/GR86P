@@ -258,14 +258,12 @@ Instead of redrawing every raw GNSS point forever, the road builder stores disco
 Current road discovery pipeline:
 
 ```text
-gnss.log
-    ↓
-route_points table
-    ↓
-road_cells table
-    ↓
-dashboard map
+gnss.log > route_points table > road_cells table > dashboard map
 ```
+As of May 2026, this is the map of roads that I have driven. Amazing!
+
+![GR86P road discovery](README_files/ALLROADS.png)
+
 
 ---
 
