@@ -5,17 +5,17 @@ dashboard.py
 Simple local GR86P dashboard.
 
 Home tab:
-- roads discovered map from combined database
+- Roads discovered map from road_cells
 
 Drives tab:
-- individual drive list
-- selected drive route map
+- Individual drive list
+- Selected drive route map
 
-Before running this, update the DB:
-    python3 roads_builder.py --sessions /home/aditya/GR86P/sessions --db gr86p_dashboard.db
-
-Then run:
-    python3 dashboard.py --db gr86p_dashboard.db
+Expected flow:
+    make -C summarize summary
+    ./summarize/summary /home/aditya/GR86P/sessions
+    python3 dashboard/roads_builder.py --sessions /home/aditya/GR86P/sessions --db gr86p_dashboard.db
+    python3 dashboard/dashboard.py --db gr86p_dashboard.db
 
 Open:
     http://127.0.0.1:8080
@@ -399,7 +399,7 @@ HTML = r"""<!doctype html>
         <div id="xpView" class="hidden">
           <h2>XP</h2>
           <p class="label">
-            Keep this dumb at first: exploration XP = unique road cells.
+            Keep this simple at first: exploration XP = unique road cells.
             Fancy scoring can come after the data is trustworthy.
           </p>
         </div>
@@ -739,105 +739,112 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/summary":
-            with self.db() as conn:
-                total_sessions = conn.execute(
-                    "SELECT COUNT(*) FROM sessions"
-                ).fetchone()[0]
-
-                gnss_sessions = conn.execute(
-                    "SELECT COUNT(*) FROM sessions WHERE has_gnss = 1"
-                ).fetchone()[0]
-
-                road_cells = conn.execute(
-                    "SELECT COUNT(*) FROM road_cells"
-                ).fetchone()[0]
-
-                gnss_miles = conn.execute(
-                    "SELECT COALESCE(SUM(gnss_distance_miles), 0) FROM sessions"
-                ).fetchone()[0]
-
-                top_speed = conn.execute(
-                    "SELECT MAX(COALESCE(max_speed_mph, gnss_max_speed_mph, 0)) FROM sessions"
-                ).fetchone()[0]
-
-                max_rpm = conn.execute(
-                    "SELECT MAX(COALESCE(max_rpm, 0)) FROM sessions"
-                ).fetchone()[0]
-
-                self.send_json({
-                    "total_sessions": total_sessions,
-                    "gnss_sessions": gnss_sessions,
-                    "road_cells": road_cells,
-                    "gnss_miles": gnss_miles,
-                    "top_speed_mph": top_speed,
-                    "max_rpm": max_rpm,
-                })
-
+            self.api_summary()
             return
 
         if path == "/api/sessions":
-            with self.db() as conn:
-                rows = conn.execute("""
-                    SELECT *
-                    FROM sessions
-                    ORDER BY COALESCE(start_wall_time, 0) DESC
-                """).fetchall()
-
-                self.send_json([dict(r) for r in rows])
-
+            self.api_sessions()
             return
 
         if path == "/api/roads":
-            with self.db() as conn:
-                rows = conn.execute("""
-                    SELECT
-                        cell_id,
-                        center_lat,
-                        center_lon,
-                        hit_count,
-                        first_seen_session,
-                        last_seen_session
-                    FROM road_cells
-                    ORDER BY hit_count DESC
-                """).fetchall()
-
-                self.send_json({
-                    "cells": [dict(r) for r in rows]
-                })
-
+            self.api_roads()
             return
 
         if path.startswith("/api/route/"):
             session_id = unquote(path.split("/api/route/", 1)[1])
-
-            with self.db() as conn:
-                rows = conn.execute("""
-                    SELECT
-                        wall_time,
-                        lat,
-                        lon,
-                        speed_mph,
-                        course_deg,
-                        satellites,
-                        hdop,
-                        altitude_m
-                    FROM route_points
-                    WHERE session_id = ?
-                    ORDER BY point_index
-                """, (session_id,)).fetchall()
-
-                self.send_json({
-                    "session_id": session_id,
-                    "points": [dict(r) for r in rows]
-                })
-
+            self.api_route(session_id)
             return
 
         self.send_json({"error": "not found"}, 404)
 
+    def api_summary(self):
+        with self.db() as conn:
+            total_sessions = conn.execute(
+                "SELECT COUNT(*) FROM sessions"
+            ).fetchone()[0]
+
+            gnss_sessions = conn.execute(
+                "SELECT COUNT(*) FROM sessions WHERE has_gnss = 1"
+            ).fetchone()[0]
+
+            road_cells = conn.execute(
+                "SELECT COUNT(*) FROM road_cells"
+            ).fetchone()[0]
+
+            gnss_miles = conn.execute(
+                "SELECT COALESCE(SUM(gnss_distance_miles), 0) FROM sessions"
+            ).fetchone()[0]
+
+            top_speed = conn.execute(
+                "SELECT MAX(COALESCE(max_speed_mph, gnss_max_speed_mph, 0)) FROM sessions"
+            ).fetchone()[0]
+
+            max_rpm = conn.execute(
+                "SELECT MAX(COALESCE(max_rpm, 0)) FROM sessions"
+            ).fetchone()[0]
+
+            self.send_json({
+                "total_sessions": total_sessions,
+                "gnss_sessions": gnss_sessions,
+                "road_cells": road_cells,
+                "gnss_miles": gnss_miles,
+                "top_speed_mph": top_speed,
+                "max_rpm": max_rpm,
+            })
+
+    def api_sessions(self):
+        with self.db() as conn:
+            rows = conn.execute("""
+                SELECT *
+                FROM sessions
+                ORDER BY COALESCE(start_wall_time, 0) DESC
+            """).fetchall()
+
+            self.send_json([dict(r) for r in rows])
+
+    def api_roads(self):
+        with self.db() as conn:
+            rows = conn.execute("""
+                SELECT
+                    cell_id,
+                    center_lat,
+                    center_lon,
+                    hit_count,
+                    first_seen_session,
+                    last_seen_session
+                FROM road_cells
+                ORDER BY hit_count DESC
+            """).fetchall()
+
+            self.send_json({
+                "cells": [dict(r) for r in rows]
+            })
+
+    def api_route(self, session_id):
+        with self.db() as conn:
+            rows = conn.execute("""
+                SELECT
+                    wall_time,
+                    lat,
+                    lon,
+                    speed_mph,
+                    course_deg,
+                    satellites,
+                    hdop,
+                    altitude_m
+                FROM route_points
+                WHERE session_id = ?
+                ORDER BY point_index
+            """, (session_id,)).fetchall()
+
+            self.send_json({
+                "session_id": session_id,
+                "points": [dict(r) for r in rows]
+            })
+
 
 def main():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Run local GR86P dashboard")
     parser.add_argument("--db", default="gr86p_dashboard.db")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8080)
