@@ -326,7 +326,7 @@ HTML = r"""<!doctype html>
         </div>
 
         <div class="car-placeholder">
-          360 CAR LATER
+          car
         </div>
 
         <div class="mini-status">
