@@ -1,3 +1,5 @@
+# This file serves to configurate the can and gnss devices as well as the logging params. #
+
 from pathlib import Path
 
 # Logging dir

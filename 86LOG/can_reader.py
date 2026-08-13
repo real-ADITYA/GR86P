@@ -20,6 +20,7 @@ class CanReader:
     def recv(self, timeout=1.0):
         message = self.bus.recv(timeout=timeout)
 
+        # skip if no message received
         if message is None:
             return None
 

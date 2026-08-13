@@ -38,11 +38,14 @@ class GnssReader:
     def recv(self):
         raw = self.ser.readline()
 
+        # skip if no message received
         if not raw:
             return None
 
+        # decond the bytes to a string
         line = raw.decode("ascii", errors="ignore").strip()
 
+        # skip if no message received
         if not line:
             return None
 
