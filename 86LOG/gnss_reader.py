@@ -42,7 +42,7 @@ class GnssReader:
         if not raw:
             return None
 
-        # decond the bytes to a string
+        # decode the bytes to a string
         line = raw.decode("ascii", errors="ignore").strip()
 
         # skip if no message received
