@@ -1,0 +1,23 @@
+[Unit]
+Description=GR86 Telemetry Dashboard
+After=local-fs.target systemd-modules-load.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/GR86P/86DASH/86_dash
+Environment=PYTHONUNBUFFERED=1
+Environment=GR86_SESSIONS_DIR=/root/sessions
+
+# CAN and USB GNSS may appear shortly after userspace starts. The dashboard's
+# readers keep retrying if either device is not ready yet.
+ExecStart=/usr/bin/python3 /root/GR86P/86DASH/86_dash/server.py --host 0.0.0.0 --port 8086
+
+Restart=on-failure
+RestartSec=2
+KillSignal=SIGINT
+TimeoutStopSec=5
+
+[Install]
+WantedBy=multi-user.target

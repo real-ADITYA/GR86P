@@ -1,0 +1,27 @@
+[Unit]
+Description=GR86 CAN and GNSS Logger
+After=local-fs.target systemd-modules-load.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/GR86P/86LOG
+Environment=PYTHONUNBUFFERED=1
+
+# Give the CAN and USB GNSS hardware time to appear during boot.
+ExecStartPre=/bin/sleep 3
+
+# Configure the existing SocketCAN interface for the GR86 CAN bus.
+ExecStartPre=-/usr/sbin/ip link set can0 down
+ExecStartPre=/usr/sbin/ip link set can0 up type can bitrate 500000
+
+ExecStart=/usr/bin/python3 /root/GR86P/86LOG/main.py
+
+Restart=on-failure
+RestartSec=3
+KillSignal=SIGINT
+TimeoutStopSec=5
+
+[Install]
+WantedBy=multi-user.target

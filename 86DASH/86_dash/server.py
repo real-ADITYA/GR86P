@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parent
 LOGGER_ROOT = ROOT.parents[1] / "86LOG"
 TANK_GALLONS = 13.2
 CAN_BITRATE = 500_000
-SESSIONS_DIR = Path("/home/aditya/GR86P/sessions")
+SESSIONS_DIR = Path(os.environ.get("GR86_SESSIONS_DIR", "/home/aditya/GR86P/sessions"))
 DECODED_CAN_IDS = {0x040, 0x138, 0x139, 0x13A, 0x13B, 0x228, 0x241,
                    0x328, 0x345, 0x390, 0x393, 0x3AC, 0x6E2, 0x808, 0x940}
 

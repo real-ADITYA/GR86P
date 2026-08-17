@@ -3,7 +3,7 @@
 from pathlib import Path
 
 # Logging dir
-SESSIONS_DIR = Path("/home/aditya/GR86P/sessions")
+SESSIONS_DIR = Path("/root/sessions")
 
 # CAN
 CAN_INTERFACE = "can0"
