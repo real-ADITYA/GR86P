@@ -319,6 +319,45 @@ def gnss_loop(port, baud):
                     pass
 
 
+def gnss_log_loop(sessions_dir):
+    """Follow the logger's newest GNSS file so only 86LOG owns the serial port."""
+    current_path = None
+    stream = None
+    while True:
+        try:
+            sessions = sorted(
+                (path for path in sessions_dir.iterdir()
+                 if path.is_dir() and path.name.isdigit()),
+                key=lambda path: int(path.name),
+            )
+            latest_path = sessions[-1] / "gnss.log" if sessions else None
+            if latest_path != current_path and latest_path and latest_path.exists():
+                if stream:
+                    stream.close()
+                stream = latest_path.open("r", encoding="utf-8", errors="ignore")
+                stream.seek(0, os.SEEK_END)
+                current_path = latest_path
+
+            line = stream.readline() if stream else ""
+            if line:
+                _, separator, raw = line.strip().partition(" ")
+                update, fixed = decode_nmea(raw if separator else line.strip())
+                now = time.monotonic()
+                with LOCK:
+                    STATE.update(update)
+                    SESSION["last_gnss_line"] = now
+                    if fixed:
+                        SESSION["last_fix"] = now
+            else:
+                time.sleep(0.1)
+        except OSError:
+            if stream:
+                stream.close()
+            stream = None
+            current_path = None
+            time.sleep(1)
+
+
 def demo_loop():
     started = time.monotonic()
     last_gear = 3
@@ -412,6 +451,8 @@ def main():
     parser.add_argument("--interface", default="can0")
     parser.add_argument("--gnss-port")
     parser.add_argument("--gnss-baud", type=int, default=9600)
+    parser.add_argument("--gnss-log-dir", type=Path,
+                        help="follow 86LOG GNSS output instead of opening the serial port")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8086)
     parser.add_argument("--demo", action="store_true", help="exercise the real UI state path without hardware")
@@ -420,7 +461,10 @@ def main():
         threading.Thread(target=demo_loop, daemon=True).start()
     else:
         threading.Thread(target=can_loop, args=(args.interface,), daemon=True).start()
-        threading.Thread(target=gnss_loop, args=(args.gnss_port, args.gnss_baud), daemon=True).start()
+        gnss_target = gnss_log_loop if args.gnss_log_dir else gnss_loop
+        gnss_args = ((args.gnss_log_dir,) if args.gnss_log_dir
+                     else (args.gnss_port, args.gnss_baud))
+        threading.Thread(target=gnss_target, args=gnss_args, daemon=True).start()
     print(f"86DASH -> http://{args.host}:{args.port} (1280x400)")
     ThreadingHTTPServer((args.host, args.port), Handler).serve_forever()
 

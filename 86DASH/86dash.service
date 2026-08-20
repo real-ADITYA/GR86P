@@ -1,6 +1,7 @@
 [Unit]
 Description=GR86 Telemetry Dashboard
-After=local-fs.target systemd-modules-load.service
+Requires=86log.service
+After=local-fs.target systemd-modules-load.service 86log.service
 StartLimitIntervalSec=0
 
 [Service]
@@ -10,9 +11,9 @@ WorkingDirectory=/root/GR86P/86DASH/86_dash
 Environment=PYTHONUNBUFFERED=1
 Environment=GR86_SESSIONS_DIR=/root/sessions
 
-# CAN and USB GNSS may appear shortly after userspace starts. The dashboard's
-# readers keep retrying if either device is not ready yet.
-ExecStart=/usr/bin/python3 /root/GR86P/86DASH/86_dash/server.py --host 0.0.0.0 --port 8086
+# 86LOG owns the GNSS serial port. The dashboard follows its current gnss.log.
+# SocketCAN safely supports the logger and dashboard as simultaneous readers.
+ExecStart=/usr/bin/python3 /root/GR86P/86DASH/86_dash/server.py --host 0.0.0.0 --port 8086 --gnss-log-dir /root/sessions
 
 Restart=on-failure
 RestartSec=2
