@@ -14,10 +14,11 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent
-LOGGER_ROOT = ROOT.parents[1] / "86LOG"
+LOGGER_ROOT = ROOT.parent / "86LOG"
+PROJECT_ROOT = ROOT.parent
 TANK_GALLONS = 13.2
 CAN_BITRATE = int(os.environ.get("GR86_CAN_BITRATE", "500000"))
-SESSIONS_DIR = Path(os.environ.get("GR86_SESSIONS_DIR", "/var/lib/gr86p/sessions"))
+SESSIONS_DIR = Path(os.environ.get("GR86_SESSIONS_DIR", PROJECT_ROOT / "sessions"))
 DECODED_CAN_IDS = {0x040, 0x138, 0x139, 0x13A, 0x13B, 0x228, 0x241,
                    0x328, 0x345, 0x390, 0x393, 0x3AC, 0x6E2, 0x808, 0x940}
 
@@ -266,7 +267,7 @@ def can_loop(interface):
     while True:
         reader = None
         try:
-            from can_reader import CanReader
+            from main import CanReader
             reader = CanReader(interface)
             while True:
                 frame = reader.recv(timeout=1.0)
@@ -300,7 +301,7 @@ def gnss_loop(port, baud):
     while True:
         reader = None
         try:
-            from gnss_reader import GnssReader
+            from main import GnssReader
             reader = GnssReader(port=port, baudrate=baud)
             while True:
                 line = reader.recv()

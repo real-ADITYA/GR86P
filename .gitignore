@@ -6,5 +6,6 @@ __pycache__/
 *.py[cod]
 
 # Local and exported drive data must never be committed or deployed as source
-/sessions/
+/sessions/*
+!/sessions/.gitkeep
 /sessions*.tar.gz

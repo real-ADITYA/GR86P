@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 if (( EUID != 0 )); then
-    echo "Run this installer as root: sudo ./scripts/install_dietpi.sh" >&2
+    echo "Run this installer as root: sudo ./install.sh" >&2
     exit 1
 fi
 
@@ -28,7 +28,7 @@ if ! DIETPI_SOFTWARE=$(find_dietpi_tool dietpi-software) ||
     exit 1
 fi
 
-SOURCE_ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+SOURCE_ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 INSTALL_ROOT=/opt/gr86p
 SETTINGS_FILE=/boot/dietpi.txt
 
@@ -50,28 +50,20 @@ echo "Installing DietPi Chromium kiosk support..."
 "$DIETPI_SOFTWARE" install 113
 
 echo "Installing GR86 logger and dashboard..."
-install -d -m 0755 "$INSTALL_ROOT/86LOG" "$INSTALL_ROOT/86DASH/86_dash"
+install -d -m 0755 "$INSTALL_ROOT/86LOG" "$INSTALL_ROOT/86DASH" "$INSTALL_ROOT/sessions"
+install -m 0644 "$SOURCE_ROOT/86LOG/main.py" "$INSTALL_ROOT/86LOG/"
 install -m 0644 \
-    "$SOURCE_ROOT/86LOG/config.py" \
-    "$SOURCE_ROOT/86LOG/can_reader.py" \
-    "$SOURCE_ROOT/86LOG/gnss_reader.py" \
-    "$SOURCE_ROOT/86LOG/session_files.py" \
-    "$SOURCE_ROOT/86LOG/main.py" \
-    "$INSTALL_ROOT/86LOG/"
-install -m 0644 \
-    "$SOURCE_ROOT/86DASH/86_dash/server.py" \
-    "$SOURCE_ROOT/86DASH/86_dash/index.html" \
-    "$INSTALL_ROOT/86DASH/86_dash/"
+    "$SOURCE_ROOT/86DASH/server.py" \
+    "$SOURCE_ROOT/86DASH/index.html" \
+    "$INSTALL_ROOT/86DASH/"
 install -m 0644 "$SOURCE_ROOT/86LOG/86log.service" /etc/systemd/system/86log.service
 install -m 0644 "$SOURCE_ROOT/86DASH/86dash.service" /etc/systemd/system/86dash.service
 
 if [[ ! -e /etc/default/gr86p ]]; then
-    install -m 0644 "$SOURCE_ROOT/deploy/gr86p.env" /etc/default/gr86p
+    install -m 0644 "$SOURCE_ROOT/gr86p.env.example" /etc/default/gr86p
 else
     echo "Keeping existing /etc/default/gr86p settings."
 fi
-
-install -d -m 0755 /var/lib/gr86p/sessions
 
 echo "Configuring Chromium to boot directly to the local dashboard..."
 KIOSK_USER=root
@@ -124,5 +116,5 @@ echo
 echo "GR86P installation complete."
 echo "Dashboard: http://127.0.0.1:8086/"
 echo "Runtime settings: /etc/default/gr86p"
-echo "Sessions: /var/lib/gr86p/sessions"
+echo "Sessions: /opt/gr86p/sessions"
 echo "Reboot after configuring CAN and HDMI."

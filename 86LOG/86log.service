@@ -10,9 +10,8 @@ WorkingDirectory=/opt/gr86p/86LOG
 Environment=PYTHONUNBUFFERED=1
 Environment=GR86_CAN_INTERFACE=can0
 Environment=GR86_CAN_BITRATE=500000
-Environment=GR86_SESSIONS_DIR=/var/lib/gr86p/sessions
+Environment=GR86_SESSIONS_DIR=/opt/gr86p/sessions
 EnvironmentFile=-/etc/default/gr86p
-StateDirectory=gr86p
 
 # Configure the existing SocketCAN interface for the GR86 CAN bus.
 ExecStartPre=-/usr/sbin/ip link set ${GR86_CAN_INTERFACE} down

@@ -1,4 +1,4 @@
 # Optional pip fallback. DietPi should use the smaller Debian packages
-# python3-can and python3-serial through scripts/install_dietpi.sh.
+# python3-can and python3-serial through install.sh.
 python-can>=4,<5
 pyserial>=3.5,<4
