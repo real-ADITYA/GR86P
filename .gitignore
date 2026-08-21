@@ -1,2 +1,10 @@
 # the mac metadata file does NOT need to be tracked
 .DS_Store
+
+# Python runtime files
+__pycache__/
+*.py[cod]
+
+# Local and exported drive data must never be committed or deployed as source
+/sessions/
+/sessions*.tar.gz

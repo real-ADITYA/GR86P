@@ -9,6 +9,7 @@ class CanFrame:
     arb_id: int
     dlc: int
     data: bytes
+    is_error_frame: bool = False
 
 
 class CanReader:
@@ -30,6 +31,7 @@ class CanReader:
             arb_id=message.arbitration_id,
             dlc=message.dlc,
             data=bytes(message.data),
+            is_error_frame=bool(getattr(message, "is_error_frame", False)),
         )
 
     # shutdown when done

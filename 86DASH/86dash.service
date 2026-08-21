@@ -1,22 +1,25 @@
 [Unit]
 Description=GR86 Telemetry Dashboard
-Requires=86log.service
 After=local-fs.target systemd-modules-load.service 86log.service
 StartLimitIntervalSec=0
 
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/root/GR86P/86DASH/86_dash
+WorkingDirectory=/opt/gr86p/86DASH/86_dash
 Environment=PYTHONUNBUFFERED=1
-Environment=GR86_SESSIONS_DIR=/root/sessions
+Environment=GR86_CAN_INTERFACE=can0
+Environment=GR86_CAN_BITRATE=500000
+Environment=GR86_SESSIONS_DIR=/var/lib/gr86p/sessions
+EnvironmentFile=-/etc/default/gr86p
+StateDirectory=gr86p
 
 # 86LOG owns the GNSS serial port. The dashboard follows its current gnss.log.
 # SocketCAN safely supports the logger and dashboard as simultaneous readers.
-ExecStart=/usr/bin/python3 /root/GR86P/86DASH/86_dash/server.py --host 0.0.0.0 --port 8086 --gnss-log-dir /root/sessions
+ExecStart=/usr/bin/python3 /opt/gr86p/86DASH/86_dash/server.py --host 127.0.0.1 --port 8086 --gnss-log-dir ${GR86_SESSIONS_DIR} --interface ${GR86_CAN_INTERFACE}
 
 Restart=on-failure
-RestartSec=2
+RestartSec=1
 KillSignal=SIGINT
 TimeoutStopSec=5
 

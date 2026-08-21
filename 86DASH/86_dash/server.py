@@ -16,8 +16,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 LOGGER_ROOT = ROOT.parents[1] / "86LOG"
 TANK_GALLONS = 13.2
-CAN_BITRATE = 500_000
-SESSIONS_DIR = Path(os.environ.get("GR86_SESSIONS_DIR", "/home/aditya/GR86P/sessions"))
+CAN_BITRATE = int(os.environ.get("GR86_CAN_BITRATE", "500000"))
+SESSIONS_DIR = Path(os.environ.get("GR86_SESSIONS_DIR", "/var/lib/gr86p/sessions"))
 DECODED_CAN_IDS = {0x040, 0x138, 0x139, 0x13A, 0x13B, 0x228, 0x241,
                    0x328, 0x345, 0x390, 0x393, 0x3AC, 0x6E2, 0x808, 0x940}
 
@@ -272,6 +272,10 @@ def can_loop(interface):
                 frame = reader.recv(timeout=1.0)
                 if frame is None:
                     continue
+                if frame.is_error_frame:
+                    with LOCK:
+                        DIAG["can_errors"] += 1
+                    continue
                 update = decode_can(frame.arb_id & 0x1FFFFFFF, frame.data[:frame.dlc])
                 now = time.monotonic()
                 with LOCK:
@@ -448,7 +452,7 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     parser = argparse.ArgumentParser(description="Live 1280x400 GR86 telemetry dashboard")
-    parser.add_argument("--interface", default="can0")
+    parser.add_argument("--interface", default=os.environ.get("GR86_CAN_INTERFACE", "can0"))
     parser.add_argument("--gnss-port")
     parser.add_argument("--gnss-baud", type=int, default=9600)
     parser.add_argument("--gnss-log-dir", type=Path,

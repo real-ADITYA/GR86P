@@ -28,6 +28,7 @@ class GnssReader:
         if port is None:
             raise RuntimeError("No GNSS device found")
 
+        self.port = port
         self.ser = serial.Serial(
             port,
             baudrate=baudrate,

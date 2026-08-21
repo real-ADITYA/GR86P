@@ -1,0 +1,9 @@
+# Add the settings for your CAN adapter to /boot/firmware/config.txt.
+# The oscillator and interrupt values MUST match the actual adapter/HAT.
+
+# Example for an SPI MCP2515 board only; do not copy until verified:
+# dtparam=spi=on
+# dtoverlay=mcp2515-can0,oscillator=8000000,interrupt=25,spimaxfrequency=10000000
+
+# USB CAN adapters generally do not use a Device Tree overlay. They may need a
+# separate interface setup rule depending on their driver.

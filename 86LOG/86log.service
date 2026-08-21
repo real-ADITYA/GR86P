@@ -6,20 +6,22 @@ StartLimitIntervalSec=0
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/root/GR86P/86LOG
+WorkingDirectory=/opt/gr86p/86LOG
 Environment=PYTHONUNBUFFERED=1
-
-# Give the CAN and USB GNSS hardware time to appear during boot.
-ExecStartPre=/bin/sleep 3
+Environment=GR86_CAN_INTERFACE=can0
+Environment=GR86_CAN_BITRATE=500000
+Environment=GR86_SESSIONS_DIR=/var/lib/gr86p/sessions
+EnvironmentFile=-/etc/default/gr86p
+StateDirectory=gr86p
 
 # Configure the existing SocketCAN interface for the GR86 CAN bus.
-ExecStartPre=-/usr/sbin/ip link set can0 down
-ExecStartPre=/usr/sbin/ip link set can0 up type can bitrate 500000
+ExecStartPre=-/usr/sbin/ip link set ${GR86_CAN_INTERFACE} down
+ExecStartPre=/usr/sbin/ip link set ${GR86_CAN_INTERFACE} up type can bitrate ${GR86_CAN_BITRATE}
 
-ExecStart=/usr/bin/python3 /root/GR86P/86LOG/main.py
+ExecStart=/usr/bin/python3 /opt/gr86p/86LOG/main.py
 
 Restart=on-failure
-RestartSec=3
+RestartSec=1
 KillSignal=SIGINT
 TimeoutStopSec=5
 
