@@ -6,18 +6,15 @@ StartLimitIntervalSec=0
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/opt/gr86p/86LOG
+WorkingDirectory=__GR86P__/86LOG
 Environment=PYTHONUNBUFFERED=1
-Environment=GR86_CAN_INTERFACE=can0
-Environment=GR86_CAN_BITRATE=500000
-Environment=GR86_SESSIONS_DIR=/opt/gr86p/sessions
-EnvironmentFile=-/etc/default/gr86p
+EnvironmentFile=/etc/default/gr86p
 
 # Configure the existing SocketCAN interface for the GR86 CAN bus.
 ExecStartPre=-/usr/sbin/ip link set ${GR86_CAN_INTERFACE} down
 ExecStartPre=/usr/sbin/ip link set ${GR86_CAN_INTERFACE} up type can bitrate ${GR86_CAN_BITRATE}
 
-ExecStart=/usr/bin/python3 /opt/gr86p/86LOG/main.py
+ExecStart=/usr/bin/python3 __GR86P__/86LOG/main.py
 
 Restart=on-failure
 RestartSec=1

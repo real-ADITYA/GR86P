@@ -1,0 +1,26 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>86DASH</title>
+<!-- Shown by kiosk.sh until 86DASH answers, so a slow or failed server start is never just a black screen. -->
+<style>
+  html, body { margin: 0; height: 100%; background: #08090B; color: #92969C; cursor: none;
+    font: 14px/1.6 "DejaVu Sans Mono", monospace; letter-spacing: .12em; }
+  body { display: grid; place-items: center; text-align: center; }
+  b { display: block; color: #F2F2F2; font-size: 20px; }
+</style>
+<div><b>86DASH</b><span id="s">WAITING FOR SERVER</span></div>
+<script>
+  const started = Date.now();
+  async function check() {
+    try {
+      await fetch("http://127.0.0.1:8086/state", { mode: "no-cors", cache: "no-store" });
+      location.replace("http://127.0.0.1:8086/?oem&live");
+    } catch {
+      const s = Math.round((Date.now() - started) / 1000);
+      document.getElementById("s").textContent = s < 20 ? "WAITING FOR SERVER"
+        : `NO ANSWER FROM 86DASH FOR ${s} S · CHECK: systemctl status 86dash`;
+      setTimeout(check, 1000);
+    }
+  }
+  check();
+</script>

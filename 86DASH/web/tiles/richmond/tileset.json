@@ -1,0 +1,123 @@
+{
+  "schema": "86sim.world-tileset",
+  "schemaVersion": 1,
+  "id": "richmond",
+  "name": "Richmond (pilot)",
+  "frame": {
+    "kind": "local-enu-horizontal",
+    "projection": "transverse-mercator/WGS84",
+    "origin": {
+      "latitudeDeg": 37.5375,
+      "longitudeDeg": -77.441,
+      "altitudeMeters": 0,
+      "altitudeReference": "mean-sea-level"
+    }
+  },
+  "anchorHeightNavd88Meters": 21.981077194213867,
+  "heightRange": {
+    "minUp": -120.66325187683105,
+    "maxUp": 54.97220802307129
+  },
+  "grid": {
+    "baseTileMeters": 1280,
+    "cellsPerTile": 128,
+    "maxLevel": 3,
+    "shardLevel": 3
+  },
+  "archive": {
+    "path": "tiles.bin",
+    "byteLength": 4154016,
+    "compression": "gzip",
+    "format": "86sim.world-tile/1"
+  },
+  "tiles": [
+    [
+      3,
+      -1,
+      -1,
+      0,
+      21034
+    ],
+    [
+      3,
+      0,
+      -1,
+      21034,
+      23714
+    ],
+    [
+      3,
+      -1,
+      0,
+      44748,
+      12627
+    ],
+    [
+      3,
+      0,
+      0,
+      57375,
+      14599
+    ]
+  ],
+  "shards": [
+    [
+      3,
+      -1,
+      -1,
+      4152946,
+      325
+    ],
+    [
+      3,
+      0,
+      -1,
+      4153271,
+      424
+    ],
+    [
+      3,
+      -1,
+      0,
+      4153695,
+      146
+    ],
+    [
+      3,
+      0,
+      0,
+      4153841,
+      175
+    ]
+  ],
+  "extent": {
+    "minEast": -4070,
+    "minNorth": -7050,
+    "maxEast": 5490,
+    "maxNorth": 2500
+  },
+  "bounds": {
+    "minLatitudeDeg": 37.47396283016863,
+    "maxLatitudeDeg": 37.560015980633175,
+    "minLongitudeDeg": -77.48706436813261,
+    "maxLongitudeDeg": -77.37886404167938
+  },
+  "attribution": [
+    "© OpenStreetMap contributors (ODbL-1.0)",
+    "U.S. Geological Survey, 3D Elevation Program (public-domain)"
+  ],
+  "sourceRegions": [
+    "richmond-downtown-pilot"
+  ],
+  "stats": {
+    "tiles": 105,
+    "rawBytes": 5427629,
+    "archiveBytes": 4154016,
+    "source.buildings": 60614,
+    "source.parts": 210,
+    "source.roads": 30759,
+    "source.water": 60,
+    "source.greens": 662,
+    "source.trees": 6527
+  }
+}

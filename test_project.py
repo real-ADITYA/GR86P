@@ -30,31 +30,114 @@ logger = load_module("logger_main_test", ROOT / "86LOG/main.py")
 dashboard = load_module("dashboard_server_test", ROOT / "86DASH/server.py")
 
 
-class DashboardDecodeTests(unittest.TestCase):
-    def test_dashboard_finds_consolidated_logger(self):
-        sys.path.insert(0, str(dashboard.LOGGER_ROOT))
-        try:
-            import main as dashboard_logger
-        finally:
-            sys.path.pop(0)
-        self.assertEqual(dashboard.LOGGER_ROOT, ROOT / "86LOG")
-        self.assertTrue(hasattr(dashboard_logger, "CanReader"))
+class DashboardServerTests(unittest.TestCase):
+    def test_dashboard_does_not_import_logger(self):
+        source = (ROOT / "86DASH/server.py").read_text(encoding="utf-8")
+        self.assertNotIn("from main import", source)
 
-    def test_rmc_decode(self):
-        state, fixed = dashboard.decode_nmea(
-            "$GPRMC,123519,A,4807.038,N,01131.000,E,22.4,84.4,230394,003.1,W*6A"
+    def test_cockpit_is_bundled_for_offline_use(self):
+        self.assertTrue((ROOT / "86DASH/web/index.html").is_file())
+        self.assertTrue((ROOT / "86DASH/web/tiles/richmond/tiles.bin").is_file())
+        self.assertTrue((ROOT / "86DASH/web/assets/vehicles/gr86/gr86.glb").is_file())
+        for page in [ROOT / "86DASH/web/index.html", *(ROOT / "86DASH/web/assets").glob("*.js")]:
+            text = page.read_text(encoding="utf-8")
+            self.assertNotIn("https://", text, f"{page.name} loads something from the Internet")
+
+    def test_reads_nmea_from_both_gnss_log_formats(self):
+        self.assertEqual(dashboard.nmea_of("12.500000 $GPRMC,1*00\n"), "$GPRMC,1*00")
+        self.assertEqual(dashboard.nmea_of('{"wall_time": 1.0, "raw": "$GPGGA,2*00", "parsed": null}'), "$GPGGA,2*00")
+        self.assertIsNone(dashboard.nmea_of("12.5 garbage"))
+
+    def test_byte_ranges(self):
+        self.assertEqual(dashboard.byte_range("bytes=0-99", 1000), (0, 99))
+        self.assertEqual(dashboard.byte_range("bytes=900-", 1000), (900, 999))
+        self.assertEqual(dashboard.byte_range("bytes=-100", 1000), (900, 999))
+        self.assertEqual(dashboard.byte_range("bytes=0-5000", 1000), (0, 999))
+        self.assertIsNone(dashboard.byte_range("bytes=2000-3000", 1000))
+        self.assertIsNone(dashboard.byte_range(None, 1000))
+
+    def test_serves_only_files_inside_web(self):
+        self.assertEqual(dashboard.web_file("/?oem&live"), dashboard.WEB / "index.html")
+        self.assertIsNone(dashboard.web_file("/../server.py"))
+        self.assertIsNone(dashboard.web_file("/missing.js"))
+
+    def test_feed_hands_each_client_only_newer_events(self):
+        feed = dashboard.Feed(keep=3)
+        for k in range(5):
+            feed.add("c", [k, 0x40, "00"])
+        seq, events = feed.after(2, 0)
+        self.assertEqual(seq, 5)
+        self.assertEqual([e[2][0] for e in events], [2, 3, 4])
+        self.assertEqual(feed.after(5, 0), (5, []))
+
+    def test_last_fix_comes_from_the_newest_session_with_one(self):
+        self.assertEqual(dashboard.position_of("$GPGGA,120000.00,4221.5000,N,07103.6000,W,1,09,0.9,45.0,M,-33.0,M,,*00"),
+                         (42 + 21.5 / 60, -(71 + 3.6 / 60)))
+        self.assertIsNone(dashboard.position_of("$GPRMC,120002.00,V,,,,,,,211126,,,N*00"))
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "0007").mkdir()
+            (root / "0007" / "gnss.log").write_text(
+                "1.0 $GPRMC,120000.00,A,3732.1000,N,07726.4000,W,10.0,90.0,211126,,,A*00\n", encoding="ascii")
+            (root / "0008").mkdir()  # this drive: no fix yet
+            (root / "0008" / "gnss.log").write_text("0.5 $GPRMC,120002.00,V,,,,,,,211126,,,N*00\n", encoding="ascii")
+            dashboard.LAST_FIX.update(at=0.0, fix=None)
+            lat, lon = dashboard.last_fix(root)
+            self.assertAlmostEqual(lat, 37 + 32.1 / 60)
+            self.assertAlmostEqual(lon, -(77 + 26.4 / 60))
+
+    def test_session_number_is_the_newest_numbered_folder(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name in ("0009", "0010", "notes"):
+                (root / name).mkdir()
+            with patch.object(dashboard, "SESSIONS", root):
+                self.assertEqual(dashboard.session_name(), "0010")
+            with patch.object(dashboard, "SESSIONS", root / "missing"):
+                self.assertIsNone(dashboard.session_name())
+
+
+class DashboardStartupTests(unittest.TestCase):
+    def test_kiosk_waits_for_server_and_uses_absolute_chromium_path(self):
+        kiosk = (ROOT / "86DASH/kiosk.sh").read_text(encoding="utf-8")
+        display = (ROOT / "86DASH/chromium-autostart.sh").read_text(encoding="utf-8")
+        installer = (ROOT / "install.sh").read_text(encoding="utf-8")
+        wait = (ROOT / "86DASH/wait.html").read_text(encoding="utf-8")
+        self.assertIn("file:///usr/local/share/86dash/wait.html", kiosk)
+        self.assertIn("http://127.0.0.1:8086/state", wait)
+        self.assertIn("/usr/bin/chromium", kiosk)
+        self.assertIn("while true", kiosk)
+        self.assertIn("/usr/local/bin/86dash-kiosk", display)
+        self.assertIn('"$SOURCE_ROOT/86DASH/chromium-autostart.sh"', installer)
+
+    def test_kiosk_selects_the_panels_native_mode_only_when_offered(self):
+        import subprocess
+        kiosk = (ROOT / "86DASH/kiosk.sh").read_text(encoding="utf-8")
+        self.assertIn("--mode 1280x400", kiosk)
+        self.assertNotIn("/boot", kiosk)
+        program = kiosk.split("awk '", 1)[1].split("'", 1)[0]
+        query = (
+            "Screen 0: minimum 320 x 200, current 1920 x 1080, maximum 7680 x 7680\n"
+            "HDMI-1 connected primary 1920x1080+0+0 (normal) 0mm x 0mm\n"
+            "   1920x1080     60.00*+\n"
+            "   1280x400      60.00 \n"
+            "HDMI-2 disconnected (normal)\n"
         )
-        self.assertTrue(fixed)
-        self.assertAlmostEqual(state["lat"], 48.1173)
-        self.assertAlmostEqual(state["lon"], 11.5166667)
-        self.assertAlmostEqual(state["gnss_speed"], 22.4 * 1.15078)
+        run = lambda text: subprocess.run(["awk", program], input=text, capture_output=True, text=True).stdout.split()
+        self.assertEqual(run(query), ["HDMI-1"])
+        self.assertEqual(run(query.replace("60.00*+", "60.00 +").replace("60.00 \n", "60.00*\n", 1)), [])
+        self.assertEqual(run(query.replace("   1280x400      60.00 \n", "")), [])
 
-    def test_rpm_decode(self):
-        state = dashboard.decode_can(0x040, bytes([0, 0, 0x34, 0x12, 128]))
-        self.assertEqual(state["rpm"], 0x1234)
+    def test_dashboard_service_does_not_wait_for_logger(self):
+        service = (ROOT / "86DASH/86dash.service").read_text(encoding="utf-8")
+        self.assertNotIn("After=86log.service", service)
+        self.assertIn("Restart=always", service)
 
 
 class SessionFileTests(unittest.TestCase):
+    def test_sessions_live_in_project_folder(self):
+        self.assertEqual(logger.SESSIONS_DIR, ROOT / "sessions")
+
     def test_session_logs_and_clean_close_metadata(self):
         with tempfile.TemporaryDirectory() as directory:
             session = logger.SessionFiles(directory)

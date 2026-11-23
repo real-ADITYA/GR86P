@@ -14,15 +14,14 @@ import serial
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-SESSIONS_DIR = Path(os.environ.get("GR86_SESSIONS_DIR", PROJECT_ROOT / "sessions"))
+SESSIONS_DIR = PROJECT_ROOT / "sessions"
 CAN_INTERFACE = os.environ.get("GR86_CAN_INTERFACE", "can0")
 CAN_LOG_NAME = "raw_can.log"
 CAN_FLUSH_EVERY = 50
-CAN_FSYNC_EVERY = 200
-GNSS_ENABLED = os.environ.get("GR86_GNSS_ENABLED", "1").lower() not in {"0", "false", "no"}
+CAN_FSYNC_EVERY = 2000  # about once a second on the GR86 bus
 GNSS_PORT = os.environ.get("GR86_GNSS_PORT") or None
 GNSS_BAUDRATE = int(os.environ.get("GR86_GNSS_BAUDRATE", "9600"))
-GNSS_RETRY_SECONDS = float(os.environ.get("GR86_GNSS_RETRY_SECONDS", "2"))
+GNSS_RETRY_SECONDS = 2
 GNSS_LOG_NAME = "gnss.log"
 GNSS_FLUSH_EVERY = 1
 GNSS_FSYNC_EVERY = 20
@@ -209,15 +208,14 @@ def gnss_loop(session, stop_event, reader_factory=None):
 def main():
     can_reader = CanReader(CAN_INTERFACE)
     stop_event = threading.Event()
-    gnss_thread = None
     session = SessionFiles()
     print(f"86LOG session {session.session_dir.name}", flush=True)
 
-    if GNSS_ENABLED:
-        gnss_thread = threading.Thread(
-            target=gnss_loop, args=(session, stop_event), name="gnss-reader"
-        )
-        gnss_thread.start()
+    # GNSS is optional: without a receiver this thread just retries quietly.
+    gnss_thread = threading.Thread(
+        target=gnss_loop, args=(session, stop_event), name="gnss-reader"
+    )
+    gnss_thread.start()
 
     count = 0
     can_error_count = 0
@@ -246,8 +244,7 @@ def main():
     finally:
         stop_event.set()
         can_reader.close()
-        if gnss_thread is not None:
-            gnss_thread.join()
+        gnss_thread.join()
         session.close()
 
 

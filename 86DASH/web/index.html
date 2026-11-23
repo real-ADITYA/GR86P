@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>86SIM</title>
+    <style>
+      :root { color-scheme: dark; --fg: #d9dde2; --dim: #7c838c; --panel: rgba(12, 14, 17, 0.72); --line: rgba(255, 255, 255, 0.08); }
+      html, body { margin: 0; height: 100%; background: #060708; color: var(--fg); font: 13px/1.4 ui-sans-serif, system-ui, -apple-system, sans-serif; }
+      #app { position: fixed; inset: 0; overflow: hidden; }
+      canvas { touch-action: none; }
+      .status { position: absolute; inset: auto 0 48% 0; text-align: center; color: var(--dim); letter-spacing: 0.08em; }
+      .status.error { inset: 30% 10% auto 10%; padding: 16px 20px; color: #ffb4a8; background: rgba(60, 10, 10, 0.6); border: 1px solid rgba(255, 120, 100, 0.3); border-radius: 8px; letter-spacing: 0; white-space: pre-wrap; }
+      .twin-panel { position: absolute; top: 16px; right: 16px; width: 220px; padding: 14px 16px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+      .twin-panel h1 { margin: 0 0 10px; font-size: 14px; font-weight: 600; letter-spacing: 0.06em; }
+      .twin-panel h1 span { color: var(--dim); font-weight: 400; margin-left: 6px; }
+      .twin-panel label { display: flex; align-items: center; gap: 8px; padding: 3px 0; cursor: pointer; }
+      .twin-panel label.range { display: block; margin-top: 8px; }
+      .twin-panel output { float: right; color: var(--dim); font-variant-numeric: tabular-nums; }
+      .twin-panel input[type="range"] { width: 100%; margin: 6px 0 0; accent-color: #c9ced6; }
+      .twin-panel input[type="checkbox"] { accent-color: #c9ced6; }
+      .twin-panel .hint { margin: 10px 0 0; color: var(--dim); font-size: 11px; }
+      @media (max-width: 600px) { .twin-panel { top: auto; bottom: 12px; right: 12px; left: 12px; width: auto; } }
+
+      .telemetry { position: absolute; top: 16px; left: 16px; width: 188px; padding: 12px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+      .telemetry h1 { margin: 0 0 8px; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+      .telemetry h1 span { color: var(--dim); font-weight: 400; margin-left: 4px; text-transform: none; }
+      .telemetry dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin: 0; }
+      .telemetry dt { color: var(--dim); font-size: 11px; letter-spacing: 0.04em; align-self: baseline; }
+      .telemetry dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; align-self: baseline; }
+      .telemetry dd b { font-weight: 500; font-size: 15px; }
+      .telemetry dd small { color: var(--dim); margin-left: 4px; font-size: 10px; }
+      .telemetry b.on { color: #ff6a5c; }
+      .playback { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); width: min(760px, calc(100% - 32px)); box-sizing: border-box; display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+      .playback button { min-width: 30px; height: 28px; padding: 0 8px; color: var(--fg); background: transparent; border: 1px solid var(--line); border-radius: 6px; font: inherit; font-size: 12px; cursor: pointer; }
+      .playback button:hover { background: rgba(255, 255, 255, 0.06); }
+      .playback input[type="range"] { flex: 1; min-width: 80px; accent-color: #c9ced6; }
+      .playback output { color: var(--dim); font-variant-numeric: tabular-nums; font-size: 12px; white-space: nowrap; }
+      .playback .rates { display: flex; }
+      .playback .rates button { min-width: 0; border-radius: 0; margin-left: -1px; color: var(--dim); }
+      .playback .rates button:first-child { border-radius: 6px 0 0 6px; }
+      .playback .rates button:last-child { border-radius: 0 6px 6px 0; }
+      .playback .rates button.active { color: var(--fg); background: rgba(255, 255, 255, 0.1); }
+      @media (max-width: 600px) {
+        .telemetry { top: 12px; left: 12px; width: auto; right: 12px; }
+        .telemetry dl { grid-template-columns: repeat(5, auto); grid-auto-flow: column; grid-template-rows: auto auto; }
+        .telemetry dd { text-align: left; }
+        .playback { flex-wrap: wrap; bottom: 12px; width: calc(100% - 24px); }
+        .playback input[type="range"] { order: 5; flex-basis: 100%; }
+      }
+
+      /* The GR86 studio inset in ?world: an empty frame over the canvas; the scene host draws the studio into it. */
+      .car-view { position: absolute; left: 16px; bottom: 76px; width: min(380px, 34vw); aspect-ratio: 16 / 10; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5); cursor: grab; touch-action: none; }
+      .car-view[hidden] { display: none; }
+      .car-view span { position: absolute; top: 8px; left: 10px; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; color: var(--dim); pointer-events: none; }
+      @media (max-width: 600px) { .car-view { width: calc(50% - 18px); bottom: 104px; left: 12px; } }
+
+      .world-panel { position: absolute; top: 16px; right: 16px; width: 260px; padding: 14px 16px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+      .world-panel h1 { margin: 0 0 10px; font-size: 14px; font-weight: 600; letter-spacing: 0.06em; }
+      .world-panel h1 span { display: block; margin-top: 2px; color: var(--dim); font-weight: 400; font-size: 12px; letter-spacing: 0.02em; }
+      .world-panel .seg { display: flex; margin: 0 0 8px; }
+      .world-panel .seg button { flex: 1; height: 28px; padding: 0 6px; margin-left: -1px; color: var(--dim); background: transparent; border: 1px solid var(--line); font: inherit; font-size: 12px; cursor: pointer; }
+      .world-panel .seg button:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
+      .world-panel .seg button:last-child { border-radius: 0 6px 6px 0; }
+      .world-panel .seg button:hover { background: rgba(255, 255, 255, 0.06); }
+      .world-panel .seg button.active { color: var(--fg); background: rgba(255, 255, 255, 0.12); }
+      .world-panel label { display: flex; align-items: center; gap: 8px; padding: 2px 0; cursor: pointer; }
+      .world-panel input[type="checkbox"] { accent-color: #c9ced6; }
+      .world-panel dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin: 10px 0 0; font-size: 12px; }
+      .world-panel dt { color: var(--dim); }
+      .world-panel dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+      .world-panel .sw { display: inline-block; width: 10px; height: 3px; margin: 0 4px 2px 6px; vertical-align: middle; }
+      .world-panel .sw.br { background: #ff3d6e; } .world-panel .sw.tu { background: #3dff9e; }
+      .world-panel .hint { margin: 10px 0 0; color: var(--dim); font-size: 11px; }
+      /* 86SIM // PERCEPTION (?world&look=perception): the annotation canvas sits over the WebGL canvas, under the panels. */
+      .perception-overlay { position: absolute; left: 0; top: 0; pointer-events: none; }
+      .perception-overlay[hidden] { display: none; }
+      .perception-controls { margin: 8px 0 0; padding: 8px 0 0; border-top: 1px solid var(--line); }
+      .perception-controls h2 { margin: 0 0 6px; font: 600 11px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.1em; text-transform: uppercase; color: #7fe3ff; }
+      .perception-controls .seg { margin: 4px 0 4px; }
+      @media (max-width: 600px) { .world-panel { top: auto; bottom: 12px; right: 12px; left: 12px; width: auto; } }
+    </style>
+    <script type="module" crossorigin src="/assets/index-BKtgUUW5.js"></script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script>
+      // A kiosk has no devtools: any error that stops the page is written on screen instead of leaving it black.
+      (function () {
+        function show(msg) {
+          var d = document.getElementById("fatal") || document.body.appendChild(Object.assign(document.createElement("pre"), { id: "fatal" }));
+          d.style.cssText = "position:fixed;left:0;right:0;bottom:0;margin:0;padding:6px 10px;z-index:99;background:#300;color:#fbb;font:11px/1.4 monospace;white-space:pre-wrap;max-height:50%;overflow:hidden";
+          d.textContent = (d.textContent ? d.textContent + "\n" : "") + msg;
+        }
+        addEventListener("error", function (e) { show("ERROR " + (e.message || (e.target && (e.target.src || e.target.href)) || e)); }, true);
+        addEventListener("unhandledrejection", function (e) { show("ERROR " + (e.reason && (e.reason.stack || e.reason.message) || e.reason)); });
+      })();
+    </script>
+  </body>
+</html>

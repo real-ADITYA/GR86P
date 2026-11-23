@@ -1,0 +1,22 @@
+[
+ {
+  "id": "manh",
+  "name": "Massachusetts and New Hampshire",
+  "bounds": {
+   "minLatitudeDeg": 41.22967968028259,
+   "maxLatitudeDeg": 45.291306892345276,
+   "minLongitudeDeg": -73.71875406279376,
+   "maxLongitudeDeg": -69.803040373749
+  }
+ },
+ {
+  "id": "richmond",
+  "name": "Richmond (pilot)",
+  "bounds": {
+   "minLatitudeDeg": 37.47396283016863,
+   "maxLatitudeDeg": 37.560015980633175,
+   "minLongitudeDeg": -77.48706436813261,
+   "maxLongitudeDeg": -77.37886404167938
+  }
+ }
+]

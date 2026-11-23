@@ -9,3 +9,7 @@ __pycache__/
 /sessions/*
 !/sessions/.gitkeep
 /sessions*.tar.gz
+
+# Large maps exported from 86SIM (npm run pi:export): copied to the Pi, never committed (1 GB+)
+/86DASH/web/tiles/*/
+!/86DASH/web/tiles/richmond/

@@ -6,30 +6,14 @@ if (( EUID != 0 )); then
     exit 1
 fi
 
-find_dietpi_tool() {
-    local tool=$1 resolved
-    if resolved=$(command -v "$tool" 2>/dev/null); then
-        printf '%s\n' "$resolved"
-    elif [[ -x /boot/dietpi/$tool ]]; then
-        printf '/boot/dietpi/%s\n' "$tool"
-    else
-        return 1
-    fi
-}
-
-if ! DIETPI_SOFTWARE=$(find_dietpi_tool dietpi-software) ||
-   ! DIETPI_AUTOSTART=$(find_dietpi_tool dietpi-autostart); then
-    if [[ -e /boot/dietpi/.version || -e /boot/dietpi.txt ]]; then
-        echo "DietPi was detected, but its core tools are missing or the first-run setup is incomplete." >&2
-        echo "Expected /boot/dietpi/dietpi-software and /boot/dietpi/dietpi-autostart." >&2
-    else
-        echo "This does not appear to be a DietPi installation (/boot/dietpi was not found)." >&2
-    fi
+DIETPI_SOFTWARE=/boot/dietpi/dietpi-software
+DIETPI_AUTOSTART=/boot/dietpi/dietpi-autostart
+if [[ ! -x $DIETPI_SOFTWARE || ! -x $DIETPI_AUTOSTART ]]; then
+    echo "DietPi tools not found in /boot/dietpi. Finish DietPi's first-run setup first." >&2
     exit 1
 fi
 
 SOURCE_ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-INSTALL_ROOT=/opt/gr86p
 SETTINGS_FILE=/boot/dietpi.txt
 
 set_dietpi_setting() {
@@ -42,27 +26,41 @@ set_dietpi_setting() {
     fi
 }
 
-echo "Installing minimal GR86 runtime packages..."
-apt-get update
-apt-get install -y --no-install-recommends python3 python3-can python3-serial iproute2
+# Packages are only downloaded when missing, so re-running this offline (the car never has Internet) works.
+MISSING=()
+for package in python3 python3-can python3-serial iproute2; do
+    dpkg -s "$package" >/dev/null 2>&1 || MISSING+=("$package")
+done
+if (( ${#MISSING[@]} )); then
+    echo "Installing ${MISSING[*]} (needs Internet)..."
+    apt-get update
+    apt-get install -y --no-install-recommends "${MISSING[@]}"
+fi
+if [[ ! -x /usr/bin/chromium ]]; then
+    echo "Installing DietPi Chromium kiosk support (needs Internet)..."
+    "$DIETPI_SOFTWARE" install 113
+fi
+if [[ ! -f $SOURCE_ROOT/86DASH/web/index.html ]]; then
+    echo "86DASH/web is missing: build the cockpit on the Mac first (see README)." >&2
+    exit 1
+fi
 
-echo "Installing DietPi Chromium kiosk support..."
-"$DIETPI_SOFTWARE" install 113
-
-echo "Installing GR86 logger and dashboard..."
-install -d -m 0755 "$INSTALL_ROOT/86LOG" "$INSTALL_ROOT/86DASH" "$INSTALL_ROOT/sessions"
-install -m 0644 "$SOURCE_ROOT/86LOG/main.py" "$INSTALL_ROOT/86LOG/"
-install -m 0644 \
-    "$SOURCE_ROOT/86DASH/server.py" \
-    "$SOURCE_ROOT/86DASH/index.html" \
-    "$INSTALL_ROOT/86DASH/"
-install -m 0644 "$SOURCE_ROOT/86LOG/86log.service" /etc/systemd/system/86log.service
-install -m 0644 "$SOURCE_ROOT/86DASH/86dash.service" /etc/systemd/system/86dash.service
+echo "Installing GR86 services to run from $SOURCE_ROOT..."
+# The services run this folder in place; __GR86P__ marks where its path goes.
+install_with_path() {
+    sed "s|__GR86P__|$SOURCE_ROOT|g" "$1" > "$2"
+    chmod "$3" "$2"
+}
+install -d -m 0755 "$SOURCE_ROOT/sessions"
+install_with_path "$SOURCE_ROOT/86LOG/86log.service" /etc/systemd/system/86log.service 0644
+install_with_path "$SOURCE_ROOT/86DASH/86dash.service" /etc/systemd/system/86dash.service 0644
 
 if [[ ! -e /etc/default/gr86p ]]; then
     install -m 0644 "$SOURCE_ROOT/gr86p.env.example" /etc/default/gr86p
 else
     echo "Keeping existing /etc/default/gr86p settings."
+    # Sessions always live in $SOURCE_ROOT/sessions; drop any old override.
+    sed -i '/^GR86_SESSIONS_DIR=/d' /etc/default/gr86p
 fi
 
 echo "Configuring Chromium to boot directly to the local dashboard..."
@@ -80,20 +78,15 @@ set_dietpi_setting SOFTWARE_CHROMIUM_RES_Y 400
 set_dietpi_setting SOFTWARE_CHROMIUM_AUTOSTART_URL http://127.0.0.1:8086/
 "$DIETPI_AUTOSTART" 11
 
-# This installation has no pointing device. Disable the X server cursor rather
-# than running an additional cursor-hiding daemon. DietPi generates this script
-# when Chromium kiosk mode is selected, so patch it only afterwards.
+# DietPi launches kiosk mode from the login console rather than ordering it
+# after the web service. Replace its generated entry point with our small
+# launcher: it starts X with an absolute client path, waits for port 8086, hides
+# the cursor, and restarts Chromium if the browser exits.
 CHROMIUM_AUTOSTART=/var/lib/dietpi/dietpi-software/installed/chromium-autostart.sh
-if [[ -f $CHROMIUM_AUTOSTART ]]; then
-    sed -i -E \
-        '/^[[:space:]]*exec .*STARTX/ { /--[[:space:]]+-nocursor/! s|[[:space:]]*$| -- -nocursor|; }' \
-        "$CHROMIUM_AUTOSTART"
-    if ! grep -qE 'exec .*STARTX.*--[[:space:]]+-nocursor' "$CHROMIUM_AUTOSTART"; then
-        echo "Warning: could not add -nocursor to $CHROMIUM_AUTOSTART" >&2
-    fi
-else
-    echo "Warning: DietPi Chromium startup script was not found; cursor was not disabled." >&2
-fi
+# Both live outside GR86P so the kiosk user can run them even if GR86P is in /root.
+install -m 0755 "$SOURCE_ROOT/86DASH/kiosk.sh" /usr/local/bin/86dash-kiosk
+install -D -m 0644 "$SOURCE_ROOT/86DASH/wait.html" /usr/local/share/86dash/wait.html
+install -m 0755 "$SOURCE_ROOT/86DASH/chromium-autostart.sh" "$CHROMIUM_AUTOSTART"
 
 systemctl daemon-reload
 systemctl enable 86log.service 86dash.service
@@ -110,11 +103,9 @@ else
     echo "Configure the adapter overlay/driver, reboot, then check: systemctl status 86log"
 fi
 
-apt-get clean
-
 echo
 echo "GR86P installation complete."
-echo "Dashboard: http://127.0.0.1:8086/"
+echo "Dashboard: http://127.0.0.1:8086/?oem&live"
 echo "Runtime settings: /etc/default/gr86p"
-echo "Sessions: /opt/gr86p/sessions"
+echo "Sessions: $SOURCE_ROOT/sessions"
 echo "Reboot after configuring CAN and HDMI."
